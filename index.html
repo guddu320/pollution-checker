@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delhi Clean-Run Planner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+  <main class="mx-auto flex min-h-screen w-full max-w-3xl items-center px-4 py-8 sm:px-6">
+    <section class="w-full rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-2xl shadow-slate-950/50 sm:p-8">
+      <header class="mb-6">
+        <h1 class="text-2xl font-bold tracking-tight text-white sm:text-3xl">Delhi Clean-Run Planner</h1>
+        <p class="mt-2 text-sm text-slate-300 sm:text-base">Real-time AQI guidance for safer runs and rides in New Delhi.</p>
+      </header>
+
+      <div class="mb-5 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Monitoring station</p>
+        <p id="locationLabel" class="mt-1 text-base font-semibold text-slate-100 sm:text-lg">Detecting location...</p>
+      </div>
+
+      <div id="aqiGauge" class="mb-5 rounded-xl p-5 transition-colors duration-300">
+        <p class="text-xs uppercase tracking-wide text-slate-900/80">Current AQI</p>
+        <div class="mt-2 flex items-end justify-between gap-4">
+          <p id="aqiValue" class="text-5xl font-black leading-none text-slate-950 sm:text-6xl">--</p>
+          <p id="aqiCategory" class="text-right text-sm font-semibold uppercase tracking-wide text-slate-900 sm:text-base">Waiting...</p>
+        </div>
+      </div>
+
+      <div class="mb-5 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Go / No-Go Recommendation</p>
+        <p id="goNoGoMessage" class="mt-2 text-base font-semibold text-slate-100 sm:text-lg">Loading latest conditions...</p>
+      </div>
+
+      <section class="mb-5">
+        <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">Pollutant breakdown</h2>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <article class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wide text-slate-400">PM2.5</p>
+            <p id="pm25Value" class="mt-2 text-2xl font-bold text-slate-100">--</p>
+          </article>
+          <article class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wide text-slate-400">PM10</p>
+            <p id="pm10Value" class="mt-2 text-2xl font-bold text-slate-100">--</p>
+          </article>
+          <article class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Ozone (O3)</p>
+            <p id="o3Value" class="mt-2 text-2xl font-bold text-slate-100">--</p>
+          </article>
+        </div>
+      </section>
+
+      <aside class="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm leading-relaxed text-amber-100">
+        Tip: Running in high AQI causes deeper pollutant penetration in lungs. If it's Red, stick to a HIIT session at home.
+      </aside>
+
+      <p id="statusMessage" class="mt-4 text-sm text-slate-400" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <script>
+    window.AQI_TOKEN = "6df2b78ad611adf4e71a00fb3619d7188b0a7122";
+
+    const API_BASE = "https://api.waqi.info/feed";
+    const POLLUTANT_KEYS = ["pm25", "pm10", "o3"];
+
+    const elements = {
+      locationLabel: document.getElementById("locationLabel"),
+      aqiGauge: document.getElementById("aqiGauge"),
+      aqiValue: document.getElementById("aqiValue"),
+      aqiCategory: document.getElementById("aqiCategory"),
+      goNoGoMessage: document.getElementById("goNoGoMessage"),
+      pm25Value: document.getElementById("pm25Value"),
+      pm10Value: document.getElementById("pm10Value"),
+      o3Value: document.getElementById("o3Value"),
+      statusMessage: document.getElementById("statusMessage")
+    };
+
+    function getAqiStyle(aqiNumber) {
+      if (aqiNumber <= 50) {
+        return { category: "Good", gaugeClass: "bg-emerald-400", message: "Perfect for a long run!" };
+      }
+      if (aqiNumber <= 100) {
+        return { category: "Moderate", gaugeClass: "bg-yellow-400", message: "Good to go, but stay aware." };
+      }
+      if (aqiNumber <= 150) {
+        return {
+          category: "Unhealthy for Sensitive Groups",
+          gaugeClass: "bg-orange-400",
+          message: "Caution: Sensitive groups should move indoors."
+        };
+      }
+      if (aqiNumber <= 200) {
+        return { category: "Unhealthy", gaugeClass: "bg-red-500", message: "STAY INSIDE. Do a home workout instead." };
+      }
+      if (aqiNumber <= 300) {
+        return { category: "Very Unhealthy", gaugeClass: "bg-purple-600", message: "STAY INSIDE. Do a home workout instead." };
+      }
+      return { category: "Hazardous", gaugeClass: "bg-fuchsia-700", message: "STAY INSIDE. Do a home workout instead." };
+    }
+
+    function setPollutants(iaqi) {
+      const values = {
+        pm25: iaqi?.pm25?.v,
+        pm10: iaqi?.pm10?.v,
+        o3: iaqi?.o3?.v
+      };
+
+      elements.pm25Value.textContent = values.pm25 ?? "N/A";
+      elements.pm10Value.textContent = values.pm10 ?? "N/A";
+      elements.o3Value.textContent = values.o3 ?? "N/A";
+    }
+
+    function setLoadingState(message) {
+      elements.statusMessage.textContent = message;
+      elements.aqiValue.textContent = "--";
+      elements.aqiCategory.textContent = "Loading";
+      elements.goNoGoMessage.textContent = "Loading latest conditions...";
+      elements.aqiGauge.className = "mb-5 rounded-xl p-5 bg-slate-600 transition-colors duration-300";
+      elements.pm25Value.textContent = "--";
+      elements.pm10Value.textContent = "--";
+      elements.o3Value.textContent = "--";
+    }
+
+    function setErrorState(message) {
+      elements.statusMessage.textContent = message;
+      elements.aqiCategory.textContent = "Unavailable";
+      elements.goNoGoMessage.textContent = "Unable to assess conditions right now.";
+      elements.aqiGauge.className = "mb-5 rounded-xl p-5 bg-slate-700 transition-colors duration-300";
+    }
+
+    async function fetchWaqi(pathSegment) {
+      const url = `${API_BASE}/${encodeURIComponent(pathSegment)}/?token=${encodeURIComponent(window.AQI_TOKEN)}`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`WAQI request failed with status ${response.status}`);
+      }
+      const payload = await response.json();
+      if (payload.status !== "ok") {
+        const reason = payload.data || "Unknown WAQI API error";
+        throw new Error(typeof reason === "string" ? reason : "WAQI API returned a non-ok status");
+      }
+      return payload.data;
+    }
+
+    function applyDataToUI(data) {
+      const aqiNumber = Number(data.aqi);
+      if (!Number.isFinite(aqiNumber) || aqiNumber < 0) {
+        throw new Error("Invalid AQI value in response.");
+      }
+
+      const style = getAqiStyle(aqiNumber);
+      elements.aqiGauge.className = `mb-5 rounded-xl p-5 transition-colors duration-300 ${style.gaugeClass}`;
+      elements.aqiValue.textContent = String(aqiNumber);
+      elements.aqiCategory.textContent = style.category;
+      elements.goNoGoMessage.textContent = style.message;
+
+      const cityName = data?.city?.name || "Delhi";
+      elements.locationLabel.textContent = cityName;
+      setPollutants(data.iaqi || {});
+      elements.statusMessage.textContent = "Latest AQI loaded.";
+    }
+
+    function getCurrentPosition() {
+      return new Promise((resolve, reject) => {
+        if (!("geolocation" in navigator)) {
+          reject(new Error("Geolocation not supported by your browser."));
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: false,
+          timeout: 7000,
+          maximumAge: 300000
+        });
+      });
+    }
+
+    async function loadAqi() {
+      if (!window.AQI_TOKEN || window.AQI_TOKEN === "YOUR_TOKEN_HERE") {
+        elements.locationLabel.textContent = "Delhi";
+        setErrorState("Set window.AQI_TOKEN to your WAQI API token to load live data.");
+        return;
+      }
+
+      setLoadingState("Detecting nearest station...");
+
+      let data;
+      try {
+        const position = await getCurrentPosition();
+        const { latitude, longitude } = position.coords;
+        data = await fetchWaqi(`geo:${latitude};${longitude}`);
+      } catch (geoError) {
+        elements.statusMessage.textContent = "Using Delhi fallback (location unavailable).";
+      }
+
+      try {
+        if (!data) {
+          data = await fetchWaqi("Delhi");
+        }
+        applyDataToUI(data);
+      } catch (error) {
+        elements.locationLabel.textContent = "Delhi";
+        setErrorState(`Could not load AQI data: ${error.message}`);
+      }
+    }
+
+    loadAqi();
+  </script>
+</body>
+</html>
